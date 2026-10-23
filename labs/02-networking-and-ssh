@@ -43,9 +43,15 @@ The main components are:
 
 On Windows, an SSH client can be used from PowerShell or Windows Terminal. Once connected, commands execute on the remote Fedora server, not on the Windows machine.
 
+### DHCP and reserved IP addressess
+
+DHCP (Dynamic Host Configuration Protocol) is the protocol responsible for handing out internal IP addresses to devices on a network. It pulls from a pool of available addressess. 
+
+DHCP doesn't neccessarily give the same IP address to the same device each time it connects to a network. To make it so a device has the same IP address each time, that address must be reserved so that it is always associated with the MAC address of that device.
+
 ## 3. Procedure
 
-### 3.1 Install and configure
+### 3.1 Install and configure ssh
 
 1. `sudo dnf install openssh-server`: install the software to use ssh server. Reveals server is already installed.
     - `dnf`: Fedora’s package manager
@@ -58,14 +64,12 @@ If server was not active, use `sudo systemctl start sshd` to start.
 
 If server was not enabled, use `sudo systemctl enable sshd` or `sudo systemctl enable --now sshd`, which enables and starts service now. 
 
-### 3.2 Allow SSH through firewall
+4. `sudo firewall-cmd --permanent --add-service=ssh`: allows SSH through Fedora's firewall by adding to permanent allowed services list.
 
-`sudo firewall-cmd --permanent --add-service=ssh`: allows SSH through Fedora's firewall by adding to permanent allowed services list.
-
-Note `ssh` here not `sshd`: `ssh` is the client (i.e. the workstation) while `sshd` is the server-side systemd service
+    - Note `ssh` here not `sshd`: `ssh` is the client (i.e. the workstation) while `sshd` is the server-side systemd service
 
 
-### 3.3 Remote access
+### 3.2 Remote access
 
 Get the server's IPv4 address. On the PC:
 - `hostname -I`: IPv4 address next to `inet`
@@ -79,15 +83,89 @@ Result: 192.168.0.222
 Note: this IP address can currently change. Will fix this problem later by reserving an IP address for the server via DHCP.
 
 On the Windows workstation:
-- Login on workstation using `ssh serveradmin@192.168.0.222` (i.e. `ssh \<username\>@\<IP address\>`) in PowerShell and typing in the password. The first time logging asks whether to trust the device: say yes.
-- Exit SSH cleanly from workstation using `exit` command. 
+- Login on workstation using `ssh serveradmin@192.168.0.222` (i.e. `ssh <username>@<IP address>`) in PowerShell and typing in the password. The first time logging asks whether to trust the device: say yes.
+- Exit SSH cleanly from workstation using `exit` command.
+
+### 3.3 DHCP reservation
+
+- `ip link show wlo1`: returns Wi-Fi MAC address next to `link/ether`.
+- `ip route`: find the router MAC address on the line beginning `default`. 
+- `ip -brief address show wlo1`: confirm the server's address (to check in case it has changed since setting up)
+- Login into router admin page on browser, find DHCP / reserved addresses section, and reserve an IP address that does is not in conflict with any other reserved addresses for the MAC address of the Wi-Fi.
+
+### 3.4 Permanent hostname
+
+A permanent hostname identifies the device.
+
+- `hostnamectl`: check the current hostname (`localhost`)
+- `sudo hostnamectl set-hostname fedora-server`: set the hostname to `fedora-server`
+- `hostnamectl`: verify the change has occured
+
+### 3.5 Test network connectivity and DNS
+
+- `ping -c 4 <router-ip>`: test router is reachable (sends 4 packets then stops). All packets transmitted and received.
+- `ping -c 4 1.1.1.1`: tests connectivity to a public IP without relying on DNS resolution. All packets transmitted and received.
+- `getent ahosts fedoraproject.org`: test DNS resolution. IP address returned so success!
+
+### 3.6 SSH key-based authentication
+
+Already have a key pair used by MSYS2 Bash on the Windows workstation. First, make it so I can SSH in from the bash terminal:
+
+- In MSYS2 UCRT64 terminal: `ls -la ~/.ssh` lists all .ssh files
+- `cat ~/.ssh/id_ed25519.pub`: display public key.
+- `ssh-copy-id -i ~/.ssh/id_ed25519.pub serveradmin@192.168.0.222`: copy key to Fedora.
+- `ssh serveradmin@192.168.0.222`: confirm can log in on Bash terminal - works!
+
+Move key from MSYS2 directory to Windows .ssh then configure MSYS2 to use it. 
+
+Make it work for Windows. 
+- In PowerShell `Get-Command ssh`: checks which SSH client PowerShell uses. Result: Windows OpenSSH.
+- In MSYS2 `cygpath -w ~/.ssh`: gets path to Windows .ssh directory.
+In PowerShell:
+- `New-Item -ItemType Directory -Force "$HOME\.ssh"`: creates .ssh directory if it doesn't exist. Already exists for me but good to know.
+- Set source and destination
+    `$source = "<path to .ssh>.ssh"`
+    `$dest = "$HOME\.ssh"`
+- Check the files and confirm the destination doesn't contain a key pair that will be overwritten. 
+    `Get-ChildItem $source`
+    `Get-ChildItem $dest`
+- Move the pair:
+    `Move-Item "$source\id_ed25519" "$dest\id_ed25519"`
+    `Move-Item "$source\id_ed25519.pub" "$dest\id_ed25519.pub"`
+- Inspect the private key:
+    `$key = "$HOME\.ssh\id_ed25519"`: assign private key's path to key.
+    `$me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name`: gets identify of currently logged in user.
+    `icacls $key`: inspect the ACL (access control list):
+```
+BUILTIN\Administrators:(F)
+NT AUTHORITY\SYSTEM:(F)
+BUILTIN\Users:(RX)
+NT AUTHORITY\Authenticated Users:(M)
+```
+Note: The F, RX and M abbreviations mean Full control, Read and execute, and Modify, respectively. The last entry means other users can read or modify my key.
+- Secure the key
+    `icacls $key /inheritance:r`: disables inheritance and removes inherited permissions so that if the directory grants access to a broad group, the private key will not inherit that access.
+    `icacls $key /remove "BUILTIN\Users" "NT AUTHORITY\Authenticated Users"`: explicity remove access to the last group.
+    `icacls $key /grant:r "${me}:(R)"`: grant the current account reas-access.
+- Inspect the ACL (access control list) again using`icacls $key`. Updated successfully!
+```
+<me>:(R)
+BUILTIN\Administrators:(F)
+NT AUTHORITY\SYSTEM:(F)
+```
+
+- In PowerShell `ssh -i "$HOME\.ssh\id_ed25519" serveradmin@192.168.0.222`: test the result! Works! Can now login with SSH password.
+- In MYSY2, test whether key stil works by trying to upload something to git up (this is what key was being used for)
+
+
 
 ## 4. Verification
 
 | Check | Evidence |
 |---|---|
 | sshd configuration | `systemctl is-active sshd` and `systemctl is-enabled sshd` showed sshd is running and configured to start automatically on boot. `sudo systemctl status sshd` shows listening on port 22 and successful connection attempts. |
-| Remote access | Server successfully accessed from workstation over Wi-Fi using SSH and  |
+| Remote access | Server successfully accessed from workstation over Wi-Fi using SSH.  |
+| Reserved IP address | Confirmed on router admin page. |
 
 ## 5. Commands Used
 
@@ -95,7 +173,12 @@ On the Windows workstation:
 
 No specific issues reported for this lab. 
 
-A possible future inconvenience is the server IP address changing so future improvements will include reserving an IP address via DHCP. 
+When setting up a key pair, PowerShell had to be reconfigured to use the same key that MSYS2 uses.
+
+`ssh -i "<path to key>" serveradmin@192.168.0.222` didn't work. 
+`Warning: Identity file <path to key> not accessible: No such file or directory.` error. Oh, the issue was I'd accidentally put ~ at end of path haha.
+
+`Bad permissions. Try removing permissions for user: BUILTIN\\Users (S-1-5-32-545) on file ` Now this error!
 
 ## 7. Outcome and Lessons Learned
 Outcomes:
