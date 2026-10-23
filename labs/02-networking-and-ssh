@@ -107,73 +107,6 @@ A permanent hostname identifies the device.
 - `ping -c 4 1.1.1.1`: tests connectivity to a public IP without relying on DNS resolution. All packets transmitted and received.
 - `getent ahosts fedoraproject.org`: test DNS resolution. IP address returned so success!
 
-### 3.6 SSH key-based authentication
-
-Already have a key pair used by MSYS2 Bash on the Windows workstation. First, make it so I can SSH in from the bash terminal:
-
-- In MSYS2 UCRT64 terminal: `ls -la ~/.ssh` lists all .ssh files
-- `cat ~/.ssh/id_ed25519.pub`: display public key.
-- `ssh-copy-id -i ~/.ssh/id_ed25519.pub serveradmin@192.168.0.222`: copy key to Fedora.
-- `ssh serveradmin@192.168.0.222`: confirm can log in on Bash terminal - works!
-
-Move key from MSYS2 directory to Windows .ssh then configure MSYS2 to use it. 
-
-Make it work for Windows. 
-- In PowerShell `Get-Command ssh`: checks which SSH client PowerShell uses. Result: Windows OpenSSH.
-- In MSYS2 `cygpath -w ~/.ssh`: gets path to Windows .ssh directory.
-In PowerShell:
-- `New-Item -ItemType Directory -Force "$HOME\.ssh"`: creates .ssh directory if it doesn't exist. Already exists for me but good to know.
-- Set source and destination
-    `$source = "<path to .ssh>.ssh"`
-    `$dest = "$HOME\.ssh"`
-- Check the files and confirm the destination doesn't contain a key pair that will be overwritten. 
-    `Get-ChildItem $source`
-    `Get-ChildItem $dest`
-- Move the pair:
-    `Move-Item "$source\id_ed25519" "$dest\id_ed25519"`
-    `Move-Item "$source\id_ed25519.pub" "$dest\id_ed25519.pub"`
-- Inspect the private key:
-    `$key = "$HOME\.ssh\id_ed25519"`: assign private key's path to key.
-    `$me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name`: gets identify of currently logged in user.
-    `icacls $key`: inspect the ACL (access control list):
-```
-BUILTIN\Administrators:(F)
-NT AUTHORITY\SYSTEM:(F)
-BUILTIN\Users:(RX)
-NT AUTHORITY\Authenticated Users:(M)
-```
-Note: The F, RX and M abbreviations mean Full control, Read and execute, and Modify, respectively. The last entry means other users can read or modify my key.
-- Secure the key
-    `icacls $key /inheritance:r`: disables inheritance and removes inherited permissions so that if the directory grants access to a broad group, the private key will not inherit that access.
-    `icacls $key /remove "BUILTIN\Users" "NT AUTHORITY\Authenticated Users"`: explicity remove access to the last group.
-    `icacls $key /grant:r "${me}:(R)"`: grant the current account reas-access.
-- Inspect the ACL (access control list) again using`icacls $key`. Updated successfully!
-```
-<me>:(R)
-BUILTIN\Administrators:(F)
-NT AUTHORITY\SYSTEM:(F)
-```
-
-- In PowerShell `ssh -i "$HOME\.ssh\id_ed25519" serveradmin@192.168.0.222`: test the result! Works! Can now login with SSH password.
-- In MYSY2, test whether key stil works by trying to upload something to git up (this is what key was being used for). Permission denied! Let's fix.
-```
-git@github.com: Permission denied (publickey).
-fatal: Could not read from remote repository.
-```
-In MYSY2:
-1. `ssh -i "$(cygpath -u "$USERPROFILE")/.ssh/id_ed25519" -T git@github.com`: try to use key from Windows .ssh directory (where we just moved the key). Successfully authenticated - works!
-2. `which ssh`: check which SSH executable Git uses
-3. `cygpath -u "$USERPROFILE"`: prints user directory in MSYS2 format
-4. `code ~/.ssh/config`: open MYSY2 SSH configuration file. Didn't exist for me so creating one.
-5. Add, but using the path from step 3
-```
-Host github.com
-    IdentityFile /c/Users/Example/.ssh/id_ed25519
-    IdentitiesOnly yes
-```
-6. `ssh -T git@github.com`: test GitHub. Success!
-7. Try to upload again (reconfirming result). Success!
-
 
 ## 4. Verification
 
@@ -187,20 +120,17 @@ Host github.com
 
 ## 6. Troubleshooting
 
-When setting up a key pair for SSH log in, some changes had to be made so that PowerShell could use the existing key pair in the MSYS2 directory which was being used for GitHub. The steps taken were:
-1. Move the key pair from the MSYS2 directry to the standard Windows .ssh directory
-2. Secure the key
-3. Add a config file to MSYS2 /.shh directory telling GitHub where to find the key now.
-
 ## 7. Outcome and Lessons Learned
 Outcomes:
 - ssh server successfully installed and configured on Fedora server
 - Remote workstation successfully accessed Fedora server over Wi-Fi using SSH
 
 Lessons Learned:
-- The difference between the ssh server (sshd) and the ssh client (ssh)
-- Multiple ways to check the connectivity and IP address of the Fedora server
-How to allow services through Fedora's firewall
+- The difference between the ssh server (sshd) and the ssh client (ssh).
+- Multiple ways to check the connectivity and IP address of the Fedora server.
+- How to allow services through Fedora's firewall.
+- How to reserve a DHCP address for a device.
+- How to give a device a permanent hostname.
 
 ## 8. Future Work
-- Investigate DHCP configuration and consider a router-side address reservation.
+- Set up an SSH key and agent
