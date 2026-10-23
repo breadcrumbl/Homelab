@@ -172,7 +172,7 @@ Host github.com
     IdentitiesOnly yes
 ```
 6. `ssh -T git@github.com`: test GitHub. Success!
-7. Try to upload again (reconfirming result).
+7. Try to upload again (reconfirming result). Success!
 
 
 ## 4. Verification
@@ -187,14 +187,10 @@ Host github.com
 
 ## 6. Troubleshooting
 
-No specific issues reported for this lab. 
-
-When setting up a key pair, PowerShell had to be reconfigured to use the same key that MSYS2 uses.
-
-`ssh -i "<path to key>" serveradmin@192.168.0.222` didn't work. 
-`Warning: Identity file <path to key> not accessible: No such file or directory.` error. Oh, the issue was I'd accidentally put ~ at end of path haha.
-
-`Bad permissions. Try removing permissions for user: BUILTIN\\Users (S-1-5-32-545) on file ` Now this error!
+When setting up a key pair for SSH log in, some changes had to be made so that PowerShell could use the existing key pair in the MSYS2 directory which was being used for GitHub. The steps taken were:
+1. Move the key pair from the MSYS2 directry to the standard Windows .ssh directory
+2. Secure the key
+3. Add a config file to MSYS2 /.shh directory telling GitHub where to find the key now.
 
 ## 7. Outcome and Lessons Learned
 Outcomes:
