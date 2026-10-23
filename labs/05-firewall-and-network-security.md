@@ -13,14 +13,6 @@ The objective of this lab is to develop a foundational understanding of Linux ne
 - Apply the principle of least privilege by allowing only the network services required for the server's intended purpose.
 - Verify configuration changes and document the results using appropriate Linux administration commands.
 
-Lab deliverable: produce a short network security assessment of your Fedora server containing:
-- The active firewall zone and the network interface associated with it.
-- A list of permitted services and explicitly configured ports.
-- A list of listening network sockets and their associated processes, where identifiable.
-- The results of one controlled firewall-rule test.
-- An explanation of how firewall rules, listening services, SSH authentication and SELinux work together.
-- A final assessment identifying unnecessary exposure or configuration changes that may be appropriate.
-
 ## 2. Background
 
 ### SELinux
