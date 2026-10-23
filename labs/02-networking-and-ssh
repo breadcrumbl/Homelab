@@ -155,8 +155,24 @@ NT AUTHORITY\SYSTEM:(F)
 ```
 
 - In PowerShell `ssh -i "$HOME\.ssh\id_ed25519" serveradmin@192.168.0.222`: test the result! Works! Can now login with SSH password.
-- In MYSY2, test whether key stil works by trying to upload something to git up (this is what key was being used for)
-
+- In MYSY2, test whether key stil works by trying to upload something to git up (this is what key was being used for). Permission denied! Let's fix.
+```
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.
+```
+In MYSY2:
+1. `ssh -i "$(cygpath -u "$USERPROFILE")/.ssh/id_ed25519" -T git@github.com`: try to use key from Windows .ssh directory (where we just moved the key). Successfully authenticated - works!
+2. `which ssh`: check which SSH executable Git uses
+3. `cygpath -u "$USERPROFILE"`: prints user directory in MSYS2 format
+4. `code ~/.ssh/config`: open MYSY2 SSH configuration file. Didn't exist for me so creating one.
+5. Add, but using the path from step 3
+```
+Host github.com
+    IdentityFile /c/Users/Example/.ssh/id_ed25519
+    IdentitiesOnly yes
+```
+6. `ssh -T git@github.com`: test GitHub. Success!
+7. Try to upload again (reconfirming result).
 
 
 ## 4. Verification
